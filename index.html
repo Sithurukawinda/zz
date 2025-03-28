@@ -3,128 +3,120 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Auto-Play YouTube Video With Sound</title>
+    <title>Auto-Play Video</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            background: #f5f5f5;
             margin: 0;
-            padding: 20px;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background: #000;
         }
         
-        .video-overlay {
+        #videoContainer {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.9);
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            overflow: hidden;
             z-index: 1000;
         }
         
-        .video-container {
-            position: relative;
-            width: 95%;
-            max-width: 800px;
-        }
-        
-        .video-iframe {
+        #videoPlayer {
             width: 100%;
-            height: 50vh;
-            border: none;
+            height: 100%;
+            object-fit: cover;
         }
         
-        .close-btn {
-            position: absolute;
-            top: -40px;
-            right: 0;
-            color: white;
-            font-size: 30px;
-            cursor: pointer;
-            background: none;
-            border: none;
-        }
-        
-        .unmute-prompt {
+        .fallback-message {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             color: white;
             text-align: center;
-            margin-top: 15px;
-            font-size: 16px;
+            z-index: 1001;
+        }
+        
+        #playButton {
+            background: #ff0000;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
         }
     </style>
 </head>
 <body>
-    <h1>Welcome to Our Site</h1>
-    <p>Video will play automatically with sound</p>
+    <div id="videoContainer">
+        <video id="videoPlayer" playsinline webkit-playsinline>
+            <source src="your-video.mp4" type="video/mp4">
+            Your browser does not support HTML5 video.
+        </video>
+    </div>
     
-    <!-- Video Popup -->
-    <div class="video-overlay" id="videoOverlay">
-        <div class="video-container">
-            <button class="close-btn" id="closeBtn">×</button>
-            <iframe class="video-iframe" id="youtubePlayer" 
-                    src="https://www.youtube.com/embed/L-4v6uKWlUs?enablejsapi=1" 
-                    frameborder="0" 
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                    allowfullscreen>
-            </iframe>
-            <div class="unmute-prompt" id="unmutePrompt">Please unmute the video if needed</div>
-        </div>
+    <div class="fallback-message" id="fallbackMessage">
+        <h2>Video could not auto-play</h2>
+        <button id="playButton">Play Video</button>
     </div>
 
     <script>
-        // YouTube API setup
-        let player;
-        const tag = document.createElement('script');
-        tag.src = "https://www.youtube.com/iframe_api";
-        const firstScriptTag = document.getElementsByTagName('script')[0];
-        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-
-        function onYouTubeIframeAPIReady() {
-            player = new YT.Player('youtubePlayer', {
-                events: {
-                    'onReady': onPlayerReady,
-                    'onStateChange': onPlayerStateChange
-                }
+        const videoPlayer = document.getElementById('videoPlayer');
+        const fallbackMessage = document.getElementById('fallbackMessage');
+        const playButton = document.getElementById('playButton');
+        
+        // Try to autoplay with sound
+        function attemptAutoplay() {
+            videoPlayer.muted = false;
+            
+            const playPromise = videoPlayer.play();
+            
+            if (playPromise !== undefined) {
+                playPromise.then(_ => {
+                    // Successfully started playing
+                })
+                .catch(error => {
+                    // Autoplay with sound failed, try muted
+                    videoPlayer.muted = true;
+                    videoPlayer.play()
+                        .then(_ => {
+                            // Muted autoplay worked
+                            fallbackMessage.innerHTML = "<h2>Video is playing (muted)</h2><p>Please unmute using the video controls</p>";
+                            fallbackMessage.style.display = 'block';
+                        })
+                        .catch(error => {
+                            // Complete autoplay failure
+                            showFallback();
+                        });
+                });
+            }
+        }
+        
+        function showFallback() {
+            fallbackMessage.style.display = 'block';
+            
+            playButton.addEventListener('click', function() {
+                videoPlayer.play();
+                fallbackMessage.style.display = 'none';
             });
         }
-
-        function onPlayerReady(event) {
-            // Try to play with sound (may be blocked by browser)
-            event.target.playVideo();
-            
-            // Fallback: If still muted after 1 second, show prompt
-            setTimeout(() => {
-                if (event.target.isMuted()) {
-                    document.getElementById('unmutePrompt').textContent = "Please click the unmute button in the player";
-                }
-            }, 1000);
-        }
-
-        function onPlayerStateChange(event) {
-            if (event.data === YT.PlayerState.ENDED) {
-                setTimeout(() => {
-                    document.getElementById('videoOverlay').style.display = 'none';
-                }, 2000);
-            }
-        }
-
-        // Close popup
-        document.getElementById('closeBtn').addEventListener('click', function() {
-            document.getElementById('videoOverlay').style.display = 'none';
-            player.pauseVideo();
+        
+        // When enough of the video has loaded, try to play
+        videoPlayer.addEventListener('loadeddata', function() {
+            attemptAutoplay();
         });
-
-        // Try to start playback when user interacts with page
-        document.addEventListener('click', function firstInteraction() {
-            if (player && player.playVideo) {
-                player.playVideo();
-            }
-            document.removeEventListener('click', firstInteraction);
-        });
+        
+        // Also try when page loads
+        document.addEventListener('DOMContentLoaded', attemptAutoplay);
+        
+        // Try again when user interacts with page
+        document.addEventListener('click', function() {
+            attemptAutoplay();
+        }, { once: true });
     </script>
 </body>
 </html>
